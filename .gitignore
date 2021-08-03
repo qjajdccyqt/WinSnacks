@@ -1,0 +1,10 @@
+*.VC.db
+*.ipch
+*.user
+*.aps
+*.vs
+*.user
+
+Debug
+Release
+*.opendb
