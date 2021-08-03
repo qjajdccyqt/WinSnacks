@@ -1,0 +1,4 @@
+[submodule "ThirdParty"]
+	path = ThirdParty
+	url = git@github.com:qjajdccyqt/ThirdParty.git
+	branch = master
