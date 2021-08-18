@@ -6,6 +6,7 @@
 #include <initguid.h>
 #include <Objbase.h>
 #include <atlbase.h>
+#include <dwmapi.h>
 
 #include <experimental/filesystem>
 #include <algorithm>
@@ -13,18 +14,21 @@
 #include <public_utils/system/environment.h>
 #include <public_utils/string/string_utils.h>
 #include <public_utils/string/charset_utils.h>
+#include <public_utils/system/win_registry.h>
 #include <public_utils/system/process.h>
 #include <public_utils/raii/com_init.h>
+#include <public_utils/timer/time.h>
 
+#pragma comment(lib,"Dwmapi.lib")
 #pragma hdrstop
 
 // 4ce576fa-83dc-4F88-951c-9d0782b4e376
 DEFINE_GUID(CLSID_UIHostNoLaunch,
-    0x4CE576FA, 0x83DC, 0x4f88, 0x95, 0x1C, 0x9D, 0x07, 0x82, 0xB4, 0xE3, 0x76);
+            0x4CE576FA, 0x83DC, 0x4f88, 0x95, 0x1C, 0x9D, 0x07, 0x82, 0xB4, 0xE3, 0x76);
 
 // 37c994e7_432b_4834_a2f7_dce1f13b834b
 DEFINE_GUID(IID_ITipInvocation,
-    0x37c994e7, 0x432b, 0x4834, 0xa2, 0xf7, 0xdc, 0xe1, 0xf1, 0x3b, 0x83, 0x4b);
+            0x37c994e7, 0x432b, 0x4834, 0xa2, 0xf7, 0xdc, 0xe1, 0xf1, 0x3b, 0x83, 0x4b);
 
 struct ITipInvocation : IUnknown
 {
@@ -38,11 +42,23 @@ constexpr auto kWindowParentClass = L"ApplicationFrameWindow";
 constexpr auto kWindowClass = L"Windows.UI.Core.CoreWindow";
 constexpr auto kWindowCaption = L"Microsoft Text Input Application";
 constexpr auto kTabTipPath = L"C:\\Program Files\\Common Files\\Microsoft Shared\\ink\\TabTip.exe";
+constexpr auto kTabletTipSubKey = "Software\\Microsoft\\TabletTip";
+constexpr auto kTabletTipOption = "EnableDesktopModeAutoInvoke";
 }
 
 bool ScreenKeyBoard::OpenScreenKeyboard()
 {
-    return OpenTabTip();
+    if (!IsTabTipAutoInvokeOnDesktopMode())
+    {
+        return OpenTabTip();
+    }
+
+    //触摸键盘有一设置项:不处于平板电脑模式且未连接键盘时显示触摸键盘，增加延迟避开系统调用键盘
+    std::thread([]() {
+        PublicUtils::Sleep(std::chrono::milliseconds(500));
+        OpenTabTip();
+    }).detach();
+    return true;
 }
 
 bool ScreenKeyBoard::OpenOskKeyboard()
@@ -152,22 +168,23 @@ bool ScreenKeyBoard::IsNewTabTipKeyboardVisable()
         return false;
     }
 
-    HWND wnd = FindWindowExW(NULL, NULL, kWindowClass, kWindowCaption);
-    if (wnd)
-    {
-        std::cerr << "there is a top-level window - the keyboard is closed. class:" << PublicUtils::CharsetUtils::UnicodeToUTF8(kWindowClass)
-            << " caption" << PublicUtils::CharsetUtils::UnicodeToUTF8(kWindowCaption) << std::endl;
-        return false;
-    }
-
-    wnd = FindWindowExW(parent, NULL, kWindowClass, kWindowCaption);
+    HWND wnd = FindWindowExW(parent, NULL, kWindowClass, kWindowCaption);
     if (!wnd)
     {
         std::cerr << "it's a child of a WindowParentClass1709 window - the keyboard is open. class:" << PublicUtils::CharsetUtils::UnicodeToUTF8(kWindowClass)
             << " caption" << PublicUtils::CharsetUtils::UnicodeToUTF8(kWindowCaption) << std::endl;
         return false;
     }
-    return true;
+
+    //触摸键盘显示和隐藏不能用IsWindowVisible判断,判断方式可参考 https://stackoverflow.com/questions/32149880/how-to-identify-windows-10-background-store-processes-that-have-non-displayed-wi
+    int cloaked = 0;
+    if (DwmGetWindowAttribute(wnd, DWMWA_CLOAKED, &cloaked, DWM_CLOAKED_INHERITED) != S_OK)
+    {
+        std::cerr << "DwmGetWindowAttribute err:" << GetLastError() << std::endl;
+        return false;
+    }
+    std::cout << "DwmGetWindowAttribute cloaked=" << cloaked;
+    return 0 == cloaked;
 }
 
 bool ScreenKeyBoard::IsOldTabTipKeyboardVisable()
@@ -186,4 +203,33 @@ bool ScreenKeyBoard::IsOldTabTipKeyboardVisable()
         << " WS_POPUP:" << (style & WS_POPUP)
         << " WS_DISABLED:" << !(style & WS_DISABLED) << std::endl;
     return (style & WS_CLIPSIBLINGS) && (style & WS_VISIBLE) && (style & WS_POPUP) && !(style & WS_DISABLED);
+}
+
+bool ScreenKeyBoard::IsTabTipAutoInvokeOnDesktopMode()
+{
+    try
+    {
+        PublicUtils::WinRegistry root(HKEY_CURRENT_USER, kTabletTipSubKey, true);
+        PublicUtils::WinRegistry::RegistryKeys programs;
+        root.SubKeys(programs);
+
+        for (auto& program : programs)
+        {
+            PublicUtils::WinRegistry item(HKEY_CURRENT_USER, kTabletTipSubKey + std::string("\\") + program, true);
+            if (!item.Exists() || !item.Exists(kTabletTipOption))
+            {
+                continue;
+            }
+
+            auto value = item.GetInt(kTabletTipOption);
+            return value != 0;
+        }
+
+        return false;
+    }
+    catch (const std::exception& e)
+    {
+        std::cerr << e.what() << std::endl;
+        return false;
+    }
 }
