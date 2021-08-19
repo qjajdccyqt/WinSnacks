@@ -7,15 +7,32 @@
 #include <comutil.h>
 #include <string>
 
+#include <public_utils/system/win_service.h>
+#include <public_utils/string/charset_utils.h>
+#include <public_utils/raii/auto_handle.h>
+
+#include "reg_common_utils.h"
+#include "polices_com_helper.h"
+
 #pragma comment(lib,"Wuguid.lib")
 #pragma comment(lib,"comsuppw.lib")
 
 namespace
 {
-IUpdateCollection *kUpdateCollection = nullptr;
+IUpdateCollection* kUpdateCollection = nullptr;
+const std::string REG_SERVICES = "SYSTEM\\CurrentControlSet\\Services\\";
+const std::string ITEM_START = "Start";
+const int ITEM_START_VALUE = 4;
+const std::string WIN_UPDATE_SERVICES[] = { "wuauserv", "TrustedInstaller", "WaaSMedicSvc", "UsoSvc", "BITS" };
+bool _trustedInstallerPermisson = false;
+const std::string REG_SCHEDULED_TASKS = "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Schedule\\TaskCache\\Tasks";
+const std::string ITEM_ID = "Id";
+const std::string ITEM_ACTIONS = "Actions";
+const std::string REG_UPDATE_POLICIES = "SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsUpdate\\AU";
+const std::unordered_map<std::string, int> WIN_UPDATE_POLICIES = { {"NoAutoUpdate", 1} };
 }
 
-BOOL DebugPrivilege(const TCHAR * PName, BOOL bEnable)
+BOOL DebugPrivilege(const TCHAR* PName, BOOL bEnable)
 {
     BOOL              result = TRUE;
     HANDLE            token;
@@ -55,9 +72,9 @@ void UpdateInstaller()
     {
         std::cerr << "kUpdateCollection is unllptr" << std::endl;
     }
-    IUpdateSession *update = nullptr;
-    IUpdateInstaller *installer = nullptr;
-    IInstallationResult *installResult = nullptr;
+    IUpdateSession* update = nullptr;
+    IUpdateInstaller* installer = nullptr;
+    IInstallationResult* installResult = nullptr;
     do
     {
         HRESULT hr;
@@ -190,9 +207,9 @@ void UpdateDownloader()
     {
         std::cerr << "kUpdateCollection is unllptr" << std::endl;
     }
-    IUpdateSession *update = nullptr;
-    IUpdateDownloader *downloader = nullptr;
-    IDownloadResult *downloadResult = nullptr;
+    IUpdateSession* update = nullptr;
+    IUpdateDownloader* downloader = nullptr;
+    IDownloadResult* downloadResult = nullptr;
     do
     {
         HRESULT hr;
@@ -295,7 +312,7 @@ void UpdateDownloader()
 void AutomaticUpdates()
 {
     std::cout << "AutomaticUpdates start" << std::endl;
-    IAutomaticUpdates *update = nullptr;
+    IAutomaticUpdates* update = nullptr;
     do
     {
         HRESULT hr;
@@ -326,14 +343,14 @@ void AutomaticUpdates()
     }
 }
 
-void UpdateSearcher(const std::wstring &criteria)
+void UpdateSearcher(const std::wstring& criteria)
 {
     std::wcout << criteria.c_str() << std::endl;
-    IUpdateSession *update = nullptr;
-    IUpdateSearcher *searcher = nullptr;
-    ISearchResult *searcherResult = nullptr;
-    IUpdate *updateItem = nullptr;
-    IInstallationBehavior *installBehavior = nullptr;
+    IUpdateSession* update = nullptr;
+    IUpdateSearcher* searcher = nullptr;
+    ISearchResult* searcherResult = nullptr;
+    IUpdate* updateItem = nullptr;
+    IInstallationBehavior* installBehavior = nullptr;
     if (kUpdateCollection)
     {
         kUpdateCollection->Release();
@@ -464,7 +481,7 @@ void UpdateSearcher(const std::wstring &criteria)
 void SystemInformation()
 {
     std::cout << "SystemInformation start" << std::endl;
-    ISystemInformation *iSystemInfo;
+    ISystemInformation* iSystemInfo;
     do
     {
         HRESULT hr;
@@ -493,6 +510,128 @@ void SystemInformation()
     }
 }
 
+bool ChangeService(const std::string& serviceName, const int& targetStartup, int& originalStartup)
+{
+    std::string regKey = REG_SERVICES + serviceName;
+    if (!RegCommonUtils::ChangeRegValue<int>(RegParam(regKey, ITEM_START, _trustedInstallerPermisson), targetStartup, originalStartup))
+    {
+        return false;
+    }
+    try
+    {
+        PublicUtils::WinService service(serviceName);
+        if (service.IsRunning().second)
+        {
+            std::cout << "stop serivce " << serviceName << std::endl;
+            service.Stop();
+        }
+    }
+    catch (PublicUtils::FrameworkException& e)
+    {
+        std::cerr << e.DisplayText();
+    }
+    return true;
+}
+
+bool EnablePriviledge(LPCTSTR lpSystemName)
+{
+    PublicUtils::AutoHandle hToken;
+    TOKEN_PRIVILEGES tkp = { 1 };
+    PublicUtils::AutoHandle CurrentProcessHandle = GetCurrentProcess();
+    if (!CurrentProcessHandle.Handle())
+    {
+        std::cerr << "GetCurrentProcess failed:" << GetLastError() << std::endl;
+        return false;
+    }
+    if (!OpenProcessToken(CurrentProcessHandle, TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hToken))
+    {
+        std::cerr << "OpenProcessToken failed:" << GetLastError() << std::endl;
+        return false;
+    }
+    if (!hToken.Handle())
+    {
+        std::cerr << "OpenProcessToken get nulptr hToken" << std::endl;
+        return false;
+    }
+    if (!LookupPrivilegeValue(NULL, lpSystemName, &tkp.Privileges[0].Luid))
+    {
+        std::cerr << "LookupPrivilegeValue failed:" << GetLastError() << std::endl;
+        return false;
+    }
+    tkp.PrivilegeCount = 1;
+    tkp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+    if (!AdjustTokenPrivileges(hToken, FALSE, &tkp, 0, (PTOKEN_PRIVILEGES)NULL, 0))
+    {
+        std::cerr << "AdjustTokenPrivileges failed:" << GetLastError() << std::endl;
+        return false;
+    }
+    std::cout << "EnablePriviledge success:" << lpSystemName << std::endl;
+    return true;
+}
+
+bool DisableWindowsUpdate()
+{
+    PolicesComHelper policesHelper;
+    if (!policesHelper.Init())
+    {
+        return false;
+    }
+
+    //让当前进程具备备份/还原的TrustedInstaller特权
+    if (EnablePriviledge(SE_BACKUP_NAME) && EnablePriviledge(SE_RESTORE_NAME))
+    {
+        _trustedInstallerPermisson = true;
+        std::cout << "trusted installer permisson:" << _trustedInstallerPermisson << std::endl;
+    }
+    else
+    {
+        std::cerr << "EnablePriviledge err:" << GetLastError() << std::endl;
+    }
+
+    int dwOriginalData = -1;
+    //禁用windows更新服务
+    for (auto iter : WIN_UPDATE_SERVICES)
+    {
+        if (ChangeService(iter, ITEM_START_VALUE, dwOriginalData))
+        {
+            std::cout << "service " << iter << " original data:" << dwOriginalData << std::endl;
+        }
+    }
+    //禁用windows更新的计划任务
+    std::unordered_set<std::string> regTaskKeys;
+    RegCommonUtils::EnumRegSubTree(REG_SCHEDULED_TASKS, regTaskKeys, true);
+    std::vector<char> updateFilterInstall = { 'u','\0','s','\0','o','\0','c','\0','l','\0','i','\0','e','\0','n','\0','t','\0','.','\0','e','\0','x','\0','e','\0',0x12,'\0','\0','\0','S','\0','t','\0','a','\0','r','\0','t','\0','S','\0','c','\0','a','\0','n','\0' };
+    std::vector<char> updateFilterScan = { 'u','\0','s','\0','o','\0','c','\0','l','\0','i','\0','e','\0','n','\0','t','\0','.','\0','e','\0','x','\0','e','\0',0x18,'\0','\0','\0','S','\0','t','\0','a','\0','r','\0','t','\0','I','\0','n','\0','s','\0','t','\0','a','\0','l','\0','l','\0' };
+    std::vector<char> updateFilterModel = { 'u','\0','s','\0','o','\0','c','\0','l','\0','i','\0','e','\0','n','\0','t','\0','.','\0','e','\0','x','\0','e','\0',0x22,'\0','\0','\0','S','\0','t','\0','a','\0','r','\0','t','\0','M','\0','o','\0','d','\0','e','\0','l','\0','U','\0','p','\0','d','\0','a','\0','t','\0','e','\0','s','\0' };
+    std::unordered_multimap<std::string, std::vector<char>> conditions;
+    conditions.emplace(std::string(), updateFilterInstall);
+    conditions.emplace(std::string(), updateFilterScan);
+    conditions.emplace(std::string(), updateFilterModel);
+    std::string subKey;
+    std::vector<char> binary;
+    for (auto iter : regTaskKeys)
+    {
+        binary.clear();
+        subKey = REG_SCHEDULED_TASKS + "\\" + iter;
+        if (RegCommonUtils::ChangeRegValue(RegParam(subKey, ITEM_ACTIONS, _trustedInstallerPermisson, true), conditions, binary))
+        {
+            std::cout << "task " << iter << " original data:" << std::string(binary.begin(), binary.end()) << std::endl;
+        }
+    }
+    //禁用windows更新组策略
+    if (policesHelper.Init())
+    {
+        for (auto iter : WIN_UPDATE_POLICIES)
+        {
+            if (policesHelper.ChangeRegValue(PolicesComHelper::PoliceParams(REG_UPDATE_POLICIES, iter.first), iter.second, dwOriginalData))
+            {
+                std::cout << "polices " << iter.first << " original data:" << dwOriginalData << std::endl;
+            }
+        }
+    }
+    return true;
+}
+
 int main()
 {
     HRESULT hr;
@@ -502,6 +641,10 @@ int main()
         std::cerr << "CoInitialize fail err:" << GetLastError() << std::endl;
         return 0;
     }
+
+    // 测试前注意保存下原值，方便后续修改回去
+    // DisableWindowsUpdate();
+
     //检查是否需要重启或关机完成更新
     SystemInformation();
     std::cout << std::endl;
