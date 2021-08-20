@@ -1,0 +1,93 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="源文件">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="头文件">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;hm;inl;inc;xsd</Extensions>
+    </Filter>
+    <Filter Include="资源文件">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="krabs">
+      <UniqueIdentifier>{bab80cc2-dbfc-49d8-b945-645fb6b73b50}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\src\etw\etw_test.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\src\etw\krabs\client.hpp">
+      <Filter>krabs</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\etw\krabs\collection_view.hpp">
+      <Filter>krabs</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\etw\krabs\compiler_check.hpp">
+      <Filter>krabs</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\etw\krabs\errors.hpp">
+      <Filter>krabs</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\etw\krabs\etw.hpp">
+      <Filter>krabs</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\etw\krabs\guid.hpp">
+      <Filter>krabs</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\etw\krabs\kernel_guids.hpp">
+      <Filter>krabs</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\etw\krabs\kernel_providers.hpp">
+      <Filter>krabs</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\etw\krabs\kt.hpp">
+      <Filter>krabs</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\etw\krabs\parse_types.hpp">
+      <Filter>krabs</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\etw\krabs\parser.hpp">
+      <Filter>krabs</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\etw\krabs\perfinfo_groupmask.hpp">
+      <Filter>krabs</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\etw\krabs\property.hpp">
+      <Filter>krabs</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\etw\krabs\provider.hpp">
+      <Filter>krabs</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\etw\krabs\schema.hpp">
+      <Filter>krabs</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\etw\krabs\schema_locator.hpp">
+      <Filter>krabs</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\etw\krabs\size_provider.hpp">
+      <Filter>krabs</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\etw\krabs\tdh_helpers.hpp">
+      <Filter>krabs</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\etw\krabs\trace.hpp">
+      <Filter>krabs</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\etw\krabs\trace_context.hpp">
+      <Filter>krabs</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\etw\krabs\ut.hpp">
+      <Filter>krabs</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\etw\krabs\version_helpers.hpp">
+      <Filter>krabs</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>
