@@ -634,6 +634,7 @@ bool DisableWindowsUpdate()
 
 int main()
 {
+    // 需要使用管理员权限运行，否则有些接口会失败，错误码提示权限不足
     HRESULT hr;
     hr = ::CoInitialize(NULL);
     if (FAILED(hr))
